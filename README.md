@@ -1,6 +1,5 @@
 # Weekend Project #1
 
-- Form groups of 3 to 5 students
 - Structure scripts to
   - Deploy
   - Query proposals
