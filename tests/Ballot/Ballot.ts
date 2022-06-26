@@ -18,6 +18,15 @@ async function giveRightToVote(ballotContract: Ballot, voterAddress: any) {
   await tx.wait();
 }
 
+/**
+ * @dev it will return a random number between 0 and 'numberOfProposals'.
+ * @param numberOfProposals is the number of proposals in list
+ * @returns a random index of proposal
+ */
+function giveRandomProposalId(numberOfProposals: number): number {
+  return Math.floor(Math.random() * numberOfProposals);
+}
+
 describe("Ballot", function () {
   let ballotContract: Ballot;
   let accounts: any[];
@@ -87,72 +96,188 @@ describe("Ballot", function () {
   });
 
   describe("when the voter interact with the vote function in the contract", function () {
-    // TODO
-    it("is not implemented", async function () {
-      throw new Error("Not implemented");
+    let voter: any = null;
+    let proposalId = 0;
+
+    beforeEach(async function () {
+      voter = accounts[1];
+      await giveRightToVote(ballotContract, voter.address); // give rights to vote
+      await ballotContract.connect(voter).vote(proposalId); // vote
+    });
+
+    it("should allow address with vote right to vote", async function () {
+      const voterInfo = await ballotContract.voters(voter.address); // get voter info
+
+      expect(voterInfo.vote).to.be.eq(proposalId); // check if the vote matches the voted proposal
+    });
+
+    it("should not allow to vote if the address has already voted", async function () {
+      await expect(
+        ballotContract.connect(voter).vote(proposalId)
+      ).to.be.revertedWith("Already voted.");
     });
   });
 
   describe("when the voter interact with the delegate function in the contract", function () {
-    // TODO
-    it("is not implemented", async function () {
-      throw new Error("Not implemented");
+    let voter1: any = null;
+    let voter2: any = null;
+    let voter3: any = null;
+
+    beforeEach(async () => {
+      voter1 = accounts[1];
+      voter2 = accounts[2];
+      voter3 = accounts[3];
+
+      await Promise.all([
+        await giveRightToVote(ballotContract, voter1.address), // give rights to vote,
+        await giveRightToVote(ballotContract, voter2.address), // give rights to vote
+        await giveRightToVote(ballotContract, voter3.address), // give rights to vote
+      ]);
+    });
+
+    it("should not allow to delegate if already voted", async function () {
+      await ballotContract.connect(voter1).vote(1);
+
+      await expect(
+        ballotContract.connect(voter1).delegate(voter1.address)
+      ).to.be.revertedWith("You already voted");
+    });
+
+    it("should not allow to self-delegate", async function () {
+      await expect(
+        ballotContract.connect(voter1).delegate(voter1.address)
+      ).to.be.revertedWith("Self-delegation is disallowed");
+    });
+
+    it("should not allow delegation loop", async function () {
+      await ballotContract.connect(voter1).delegate(voter2.address);
+      await ballotContract.connect(voter2).delegate(voter3.address);
+
+      await expect(
+        ballotContract.connect(voter3).delegate(voter1.address)
+      ).to.be.revertedWith("Found loop in delegation");
+    });
+
+    it("should not allow to delegate again, if already delegated", async function () {
+      await ballotContract.connect(voter3).delegate(voter2.address);
+
+      await expect(
+        ballotContract.connect(voter3).delegate(voter1.address)
+      ).to.be.revertedWith("");
+    });
+
+    it("should not allow to delegate to non voters", async function () {
+      let nonVoter = accounts[4].address;
+
+      await expect(
+        ballotContract.connect(voter3).delegate(nonVoter)
+      ).to.be.revertedWith("");
+    });
+
+    it("should add vote weight of to the delegator ", async function () {
+      await ballotContract.connect(voter1).delegate(voter2.address);
+      const delegatorInfo = await ballotContract.voters(voter2.address);
+      expect(delegatorInfo.weight).to.be.equal("2");
     });
   });
 
   describe("when the an attacker interact with the giveRightToVote function in the contract", function () {
-    // TODO
-    it("is not implemented", async function () {
-      throw new Error("Not implemented");
+    it("should not allow non chairperson to give voteing rights", async function () {
+      const voterAddress = accounts[1].address;
+      const attacker = accounts[2];
+      await expect(
+        ballotContract.connect(attacker).giveRightToVote(voterAddress)
+      ).to.be.revertedWith("Only chairperson can give right to vote.");
     });
   });
 
   describe("when the an attacker interact with the vote function in the contract", function () {
-    // TODO
-    it("is not implemented", async function () {
-      throw new Error("Not implemented");
+    it("should revert when the address has no right to vote", async function () {
+      const attacker = accounts[1];
+      await expect(
+        ballotContract.connect(attacker).vote("0")
+      ).to.be.revertedWith("Has no right to vote");
     });
   });
 
   describe("when the an attacker interact with the delegate function in the contract", function () {
-    // TODO
-    it("is not implemented", async function () {
-      throw new Error("Not implemented");
+    let delegator: any = null;
+    beforeEach(async function () {
+      delegator = accounts[1];
+      await giveRightToVote(ballotContract, delegator.address); // give rights to vote,
+    });
+
+    it("should not add any weight to the delegator's weight", async function () {
+      const attacker = accounts[3];
+
+      await ballotContract.connect(attacker).delegate(delegator.address);
+
+      const delegatorInfo = await ballotContract.voters(delegator.address);
+      expect(delegatorInfo.weight).to.be.equal("1");
     });
   });
 
   describe("when someone interact with the winningProposal function before any votes are cast", function () {
-    // TODO
-    it("is not implemented", async function () {
-      throw new Error("Not implemented");
+    it("should return zero", async function () {
+      const result = await ballotContract.winningProposal();
+
+      expect(result).to.be.eq("0");
     });
   });
 
   describe("when someone interact with the winningProposal function after one vote is cast for the first proposal", function () {
-    // TODO
-    it("is not implemented", async function () {
-      throw new Error("Not implemented");
+    const proposalId = "0";
+    beforeEach(async function () {
+      await ballotContract.vote(proposalId); // vote for first proposal
+    });
+    it("should return index of first proposal", async function () {
+      const actualProposal = await ballotContract.winningProposal();
+      expect(actualProposal).to.be.eq(proposalId);
     });
   });
 
   describe("when someone interact with the winnerName function before any votes are cast", function () {
-    // TODO
-    it("is not implemented", async function () {
-      throw new Error("Not implemented");
+    it("should return the name of proposal at index 0", async function () {
+      // it should return an empty string if there are no votes. But for some reason, it returns the name of the proposal at index 0.
+      const results = await ballotContract.winnerName();
+      const decodedResults = ethers.utils.parseBytes32String(results); //
+
+      expect(decodedResults).to.be.eq(PROPOSALS[0]);
     });
   });
 
   describe("when someone interact with the winnerName function after one vote is cast for the first proposal", function () {
-    // TODO
-    it("is not implemented", async function () {
-      throw new Error("Not implemented");
+    const proposalId = 0;
+
+    beforeEach(async function () {
+      await ballotContract.vote(proposalId); // vote for first proposal
+    });
+    it("should return name of first proposal", async function () {
+      const results = await ballotContract.winnerName();
+
+      const decodedResults = ethers.utils.parseBytes32String(results); //
+
+      expect(decodedResults).to.be.eq(PROPOSALS[0]);
     });
   });
 
   describe("when someone interact with the winningProposal function and winnerName after 5 random votes are cast for the proposals", function () {
-    // TODO
-    it("is not implemented", async function () {
-      throw new Error("Not implemented");
+    beforeEach(async function () {
+      for (let i = 0; i < 5; i++) {
+        const voter = accounts[i + 1];
+        await giveRightToVote(ballotContract, voter.address);
+        const proposalId = giveRandomProposalId(PROPOSALS.length);
+        await ballotContract.connect(voter).vote(proposalId);
+      }
+    });
+    it("should return name of the proposal with highest votes count", async function () {
+      const winningProposal = await ballotContract.winningProposal();
+      const results = await ballotContract.winnerName();
+
+      const index = Number(ethers.utils.formatEther(winningProposal)); // convert from bigNumber
+      const decodedResults = ethers.utils.parseBytes32String(results); //
+
+      expect(decodedResults).to.be.eq(PROPOSALS[index]);
     });
   });
 });
