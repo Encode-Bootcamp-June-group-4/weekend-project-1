@@ -1,7 +1,9 @@
 import { expect } from "chai";
 import { ethers } from "hardhat";
+import { isRegExp } from "util";
 // eslint-disable-next-line node/no-missing-import
 import { Ballot } from "../../typechain";
+import { winningProposal } from "./interfaces";
 
 const PROPOSALS = ["Proposal 1", "Proposal 2", "Proposal 3"];
 
@@ -34,9 +36,9 @@ describe("Ballot", function () {
   beforeEach(async function () {
     accounts = await ethers.getSigners();
     const ballotFactory = await ethers.getContractFactory("Ballot");
-    ballotContract = await ballotFactory.deploy(
+    ballotContract = (await ballotFactory.deploy(
       convertStringArrayToBytes32(PROPOSALS)
-    );
+    )) as Ballot;
     await ballotContract.deployed();
   });
 
@@ -262,22 +264,38 @@ describe("Ballot", function () {
   });
 
   describe("when someone interact with the winningProposal function and winnerName after 5 random votes are cast for the proposals", function () {
+    let winningProposalInfo: winningProposal = { name: "", votes: 0, index: 0 };
+
     beforeEach(async function () {
+      const proposalToVotesCount: winningProposal[] = PROPOSALS.map(
+        (proposalName, index) => ({
+          name: proposalName,
+          votes: 0,
+          index,
+        })
+      ); // create an array  to keep track of the actual votes and name Proposal off the chain
+
       for (let i = 0; i < 5; i++) {
         const voter = accounts[i + 1];
         await giveRightToVote(ballotContract, voter.address);
         const proposalId = giveRandomProposalId(PROPOSALS.length);
+
+        proposalToVotesCount[proposalId].votes += 1;
         await ballotContract.connect(voter).vote(proposalId);
       }
+      proposalToVotesCount.sort((a, b) => b.votes - a.votes); // sort the proposals with respect hightest votes
+
+      winningProposalInfo = proposalToVotesCount[0];
+    });
+
+    it("should return the highest count of votes on a proposal", async function () {
+      const winningProposal = await ballotContract.winningProposal();
+      expect(winningProposal).to.be.eq(winningProposalInfo.index);
     });
     it("should return name of the proposal with highest votes count", async function () {
-      const winningProposal = await ballotContract.winningProposal();
       const results = await ballotContract.winnerName();
-
-      const index = Number(ethers.utils.formatEther(winningProposal)); // convert from bigNumber
-      const decodedResults = ethers.utils.parseBytes32String(results); //
-
-      expect(decodedResults).to.be.eq(PROPOSALS[index]);
+      const decodedResults = ethers.utils.parseBytes32String(results);
+      expect(decodedResults).to.be.eq(winningProposalInfo.name);
     });
   });
 });
