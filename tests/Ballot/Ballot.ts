@@ -25,9 +25,9 @@ describe("Ballot", function () {
   beforeEach(async function () {
     accounts = await ethers.getSigners();
     const ballotFactory = await ethers.getContractFactory("Ballot");
-    ballotContract = await ballotFactory.deploy(
+    ballotContract = (await ballotFactory.deploy(
       convertStringArrayToBytes32(PROPOSALS)
-    );
+    )) as Ballot;
     await ballotContract.deployed();
   });
 
